@@ -12,17 +12,22 @@ import (
 
 // AddHit to a record IP
 func (r *IPRecord) AddHit() {
+	r.Lock()
 	r.Hits++
+	r.Unlock()
 }
 
 // AddElapsed to a record IP
 func (r *IPRecord) AddElapsed(elapsed float64) {
+	r.Lock()
 	r.Elapsed = append(r.Elapsed, elapsed)
+	r.Unlock()
 }
 
 // RecordIP to top
 func RecordIP(ip net.IP, hit int, elapsed float64) {
 
+	TopMutex.Lock()
 	if _, ok := TopIP[ip.String()]; ok {
 		TopIP[ip.String()].AddHit()
 		TopIP[ip.String()].AddElapsed(elapsed)
@@ -30,6 +35,7 @@ func RecordIP(ip net.IP, hit int, elapsed float64) {
 		TopIP[ip.String()] = &IPRecord{Hits: 1}
 		TopIP[ip.String()].AddElapsed(elapsed)
 	}
+	TopMutex.Unlock()
 
 }
 

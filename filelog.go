@@ -2,21 +2,27 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
 	"log"
+	"os"
+	"path"
 	"regexp"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 )
 
 // FileLog general structure
 type FileLog struct {
-	Bucket string
-	Key    string
-	Date   time.Time
+	Bucket   string
+	Key      string
+	Filename string
+	Date     time.Time
+	Cache    string
+	Start    time.Time
+	End      time.Time
 }
 
 // NewFileLog start the file log process
@@ -25,9 +31,11 @@ func NewFileLog(bucket *string, key *string) *FileLog {
 	name := *key
 
 	file := &FileLog{
-		Bucket: b,
-		Key:    name,
+		Bucket:   b,
+		Key:      name,
+		Filename: fmt.Sprintf("/tmp/%s", path.Base(name)),
 	}
+
 	file.parseDate()
 	return file
 }
@@ -47,33 +55,57 @@ func (f *FileLog) parseDate() {
 
 // Download and proccess
 func (f *FileLog) Download(start time.Time, end time.Time) {
+
+	tmpfilename := fmt.Sprintf("/tmp/.downloading__%s", path.Base(f.Filename))
+
+	// Return in case the file exists
+	if _, err := os.Stat(f.Filename); err == nil {
+		return
+	}
+
+	// Delete partial file in case
+	if _, err := os.Stat(tmpfilename); err == nil {
+		os.Remove(tmpfilename)
+		log.Printf("Deleted partial file %s", tmpfilename)
+	}
+
+	file, err := os.Create(tmpfilename)
+	if err != nil {
+		log.Fatal("Failed to create file", err)
+	}
+	defer func() {
+		file.Close()
+		os.Rename(tmpfilename, f.Filename)
+		log.Printf("Downloaded %s", f.Filename)
+	}()
+
+	downloader := s3manager.NewDownloaderWithClient(SVC, func(d *s3manager.Downloader) {
+		d.PartSize = 64 * 1024 * 1024 // 64MB per part
+	})
+
+	_, err = downloader.Download(file,
+		&s3.GetObjectInput{
+			Bucket: aws.String(f.Bucket), // Required
+			Key:    aws.String(f.Key),    // Required
+		})
+	if err != nil {
+		fmt.Println("Failed to download file", err)
+		return
+	}
+
+	/***
 	params := &s3.GetObjectInput{
 		Bucket: aws.String(f.Bucket), // Required
 		Key:    aws.String(f.Key),    // Required
 	}
 	resp, _ := SVC.GetObject(params)
 
+	fmt.Printf("Body %v", resp.Body)
+
 	count := 0
 	scanner := bufio.NewScanner(resp.Body)
 	for scanner.Scan() {
 
-		/**
-		  2016-08-27T23:56:06.983879Z
-		  MY-ELB-NAME
-		  8.8.8.8:47769
-		  192.168.1.1:80
-		  0.00002
-		  0.213758
-		  0.000023
-		  200
-		  200
-		  928
-		  832
-		  "POST http://www.example:80/somepath/index.php?mobile=true HTTP/1.1"
-		  "-"
-		  -
-		  -
-		  **/
 
 		line := NewLineLog(scanner.Text())
 
@@ -84,5 +116,6 @@ func (f *FileLog) Download(start time.Time, end time.Time) {
 	}
 
 	log.Printf("%d lines where processed", count)
+	**/
 
 }

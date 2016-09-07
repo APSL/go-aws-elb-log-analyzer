@@ -14,15 +14,6 @@ import (
 // SVC is a global session to S3
 var SVC *s3.S3
 
-// IPRecord test
-type IPRecord struct {
-	Hits    int64
-	Elapsed []float64
-}
-
-// TopIP is a counter of IP clients
-var TopIP map[string]*IPRecord
-
 func main() {
 
 	var awsProfile string
@@ -43,12 +34,13 @@ func main() {
 	var strEnd string
 	flag.StringVar(&strEnd, "end", "", "a string var")
 
-	var limit int
-	flag.IntVar(&limit, "limit", 10, "a int var")
+	var top int
+	flag.IntVar(&top, "top", 10, "a int var")
+
+	var analyze bool
+	flag.BoolVar(&analyze, "analyze", false, "a bool var")
 
 	flag.Parse()
-
-	TopIP = make(map[string]*IPRecord)
 
 	// Specify profile to load for the session's config
 	sess, _ := session.NewSessionWithOptions(session.Options{
@@ -61,25 +53,34 @@ func main() {
 	start, _ := time.Parse("2006-01-02 15:04:05 -0700", strStart)
 	end, _ := time.Parse("2006-01-02 15:04:05 -0700", strEnd)
 
+	if analyze {
+		AnalyzerDispatch(start, end)
+	}
+
 	log.Printf("Time Range: %s - %s", start.String(), end.String())
 	awsPrefix = fmt.Sprintf("%s/%d/%02d/%02d", awsPrefix, start.Year(), start.Month(), start.Day())
 
 	log.Printf("Bucket: %s/%s", awsBucket, awsPrefix)
 
 	// Start S3 file reading
-	s3page(SVC, awsBucket, awsPrefix, start, end, nil)
+	s3page(SVC, awsBucket, awsPrefix, start, end, analyze, nil)
 
-	// Print results
-	log.Println("Top clients by hits")
-	IPbyHits(limit)
+	if analyze {
+		AnalyzerQueue <- []byte(nil)
+		AnalyzerFinished()
 
-	// Print results
-	log.Println("Top of slowest clients")
-	IPbyElapsedMedian(limit)
+		// Print results
+		log.Println("Top clients by hits")
+		IPbyHits(top)
+
+		// Print results
+		log.Println("Top of slowest clients")
+		IPbyElapsedMedian(top)
+	}
 
 }
 
-func s3page(SVC *s3.S3, bucket string, prefix string, start time.Time, end time.Time, NextToken *string) {
+func s3page(SVC *s3.S3, bucket string, prefix string, start time.Time, end time.Time, analyze bool, NextToken *string) {
 	params := &s3.ListObjectsV2Input{
 		Bucket:            aws.String(bucket), // Required
 		MaxKeys:           aws.Int64(1000),
@@ -104,6 +105,9 @@ func s3page(SVC *s3.S3, bucket string, prefix string, start time.Time, end time.
 		if InTimeSpan(start, end, file.Date) {
 			log.Printf("Reading %s\n", file.Key)
 			file.Download(start, end)
+			if analyze {
+				AnalyzerQueue <- []byte(file.Filename)
+			}
 		}
 	}
 
@@ -113,7 +117,7 @@ func s3page(SVC *s3.S3, bucket string, prefix string, start time.Time, end time.
 	}
 
 	// Continue with the next "page". It's like click in "more" or scroll down
-	s3page(SVC, bucket, prefix, start, end, resp.NextContinuationToken)
+	s3page(SVC, bucket, prefix, start, end, analyze, resp.NextContinuationToken)
 }
 
 // InTimeSpan if the record it's in the time range
