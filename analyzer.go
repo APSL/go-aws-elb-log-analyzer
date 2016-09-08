@@ -11,13 +11,12 @@ import (
 
 // IPRecord test
 type IPRecord struct {
-	sync.RWMutex
 	Hits    int64
 	Elapsed []float64
 }
 
 // TopMutex is..
-var TopMutex = &sync.RWMutex{}
+var TopMutex = &sync.Mutex{}
 
 // TopIP is a counter of IP clients
 var TopIP map[string]*IPRecord
@@ -34,10 +33,10 @@ var end time.Time
 var wg sync.WaitGroup
 
 // AnalyzerDispatch starts the go routine to analyce each record
-func AnalyzerDispatch(s_start time.Time, s_end time.Time) {
+func AnalyzerDispatch(vStart time.Time, vEnd time.Time) {
 
-	start = s_start
-	end = s_end
+	start = vStart
+	end = vEnd
 
 	TopIP = make(map[string]*IPRecord)
 

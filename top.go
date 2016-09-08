@@ -12,22 +12,19 @@ import (
 
 // AddHit to a record IP
 func (r *IPRecord) AddHit() {
-	r.Lock()
 	r.Hits++
-	r.Unlock()
 }
 
 // AddElapsed to a record IP
 func (r *IPRecord) AddElapsed(elapsed float64) {
-	r.Lock()
 	r.Elapsed = append(r.Elapsed, elapsed)
-	r.Unlock()
 }
 
 // RecordIP to top
 func RecordIP(ip net.IP, hit int, elapsed float64) {
-
 	TopMutex.Lock()
+	defer TopMutex.Unlock()
+
 	if _, ok := TopIP[ip.String()]; ok {
 		TopIP[ip.String()].AddHit()
 		TopIP[ip.String()].AddElapsed(elapsed)
@@ -35,95 +32,70 @@ func RecordIP(ip net.IP, hit int, elapsed float64) {
 		TopIP[ip.String()] = &IPRecord{Hits: 1}
 		TopIP[ip.String()].AddElapsed(elapsed)
 	}
-	TopMutex.Unlock()
-
 }
 
-// IPSortedInt export
-type IPSortedInt struct {
-	Name  string
-	Value int64
+// IPSorted export
+type IPSorted struct {
+	Name       string
+	ByColumn   string
+	Hits       int64
+	Median     float64
+	Percentile float64
+	Average    float64
 }
 
-// IPSortedFloat export
-type IPSortedFloat struct {
-	Name    string
-	Value   float64
-	Perc80  float64
-	Average float64
+func (p IPSorted) String() string {
+	return fmt.Sprintf("%s", p.Name)
 }
 
-func (p IPSortedInt) String() string {
-	return fmt.Sprintf("%s: %d", p.Name, p.Value)
+// BuildIPSorter amount of times found at the logs
+type BuildIPSorter []IPSorted
+
+func (a BuildIPSorter) Len() int      { return len(a) }
+func (a BuildIPSorter) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
+func (a BuildIPSorter) Less(i, j int) bool {
+
+	switch a[i].ByColumn {
+	case "median":
+		return a[i].Median > a[j].Median
+	default:
+		return a[i].Hits > a[j].Hits
+	}
 }
 
-// ByHits amount of times found at the logs
-type ByHits []IPSortedInt
-
-func (a ByHits) Len() int           { return len(a) }
-func (a ByHits) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
-func (a ByHits) Less(i, j int) bool { return a[i].Value > a[j].Value }
-
-// IPbyHits order the repited IP
-func IPbyHits(limit int) {
-	ips := make([]IPSortedInt, len(TopIP))
+// IPbyHits order by hits
+func createTable(byColumn string) []IPSorted {
+	ips := make([]IPSorted, len(TopIP))
 
 	i := 0
 	for k, v := range TopIP {
-		ips[i] = IPSortedInt{k, v.Hits}
-		i++
-	}
-
-	sort.Sort(ByHits(ips))
-
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', tabwriter.AlignRight|tabwriter.Debug)
-
-	fmt.Fprintln(w, fmt.Sprintf("%s \t %s", "IP", "Hits"))
-
-	c := 0
-	for _, ip := range ips {
-
-		fmt.Fprintln(w, fmt.Sprintf("%s \t %v", ip.Name, ip.Value))
-
-		c++
-		if c >= limit {
-			break
-		}
-	}
-	w.Flush()
-
-}
-
-// ByElapsedMedian amount of times found at the logs
-type ByElapsedMedian []IPSortedFloat
-
-func (a ByElapsedMedian) Len() int           { return len(a) }
-func (a ByElapsedMedian) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
-func (a ByElapsedMedian) Less(i, j int) bool { return a[i].Value > a[j].Value }
-
-// IPbyElapsedMedian order the repited IP
-func IPbyElapsedMedian(limit int) {
-	ips := make([]IPSortedFloat, len(TopIP))
-
-	i := 0
-	for k, v := range TopIP {
+		hits := v.Hits
 		median, _ := stats.Median(v.Elapsed)
-		perc80, _ := stats.Percentile(v.Elapsed, 80)
+		percentile, _ := stats.Percentile(v.Elapsed, 95)
 		sum, _ := stats.Sum(v.Elapsed)
 		average := sum / float64(len(v.Elapsed))
 
-		ips[i] = IPSortedFloat{k, median, perc80, average}
+		ips[i] = IPSorted{
+			Name:       k,
+			Hits:       hits,
+			Median:     median,
+			Percentile: percentile,
+			Average:    average,
+			ByColumn:   byColumn,
+		}
 		i++
 	}
 
-	sort.Sort(ByElapsedMedian(ips))
+	return ips
+}
 
+func printTable(ips []IPSorted, limit int) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 1, ' ', tabwriter.AlignRight|tabwriter.Debug)
 	c := 0
-	fmt.Fprintln(w, fmt.Sprintf("%s \t %s \t %s \t %s", "IP", "Median", "Percentile 80", "Average"))
+	fmt.Fprintln(w, fmt.Sprintf("%s \t %s \t %s \t %s \t %s", "IP", "Hits", "Median latency", "Percentile 90 latency", "Average latency"))
 	for _, ip := range ips {
 
-		fmt.Fprintln(w, fmt.Sprintf("%s \t %.10f \t %.10f \t %.10f", ip.Name, ip.Value, ip.Perc80, ip.Average))
+		fmt.Fprintln(w, fmt.Sprintf("%s \t %d \t %.10f \t %.10f \t %.10f", ip.Name, ip.Hits, ip.Median, ip.Percentile, ip.Average))
 
 		c++
 		if c >= limit {
@@ -131,5 +103,15 @@ func IPbyElapsedMedian(limit int) {
 		}
 	}
 	w.Flush()
+}
+
+// PrintBy order by hits
+func PrintBy(limit int, byColumn string) {
+
+	ips := createTable(byColumn)
+
+	sort.Sort(BuildIPSorter(ips))
+
+	printTable(ips, limit)
 
 }

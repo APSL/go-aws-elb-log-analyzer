@@ -71,11 +71,11 @@ func main() {
 
 		// Print results
 		log.Println("Top clients by hits")
-		IPbyHits(top)
+		PrintBy(top, "hits")
 
 		// Print results
 		log.Println("Top of slowest clients")
-		IPbyElapsedMedian(top)
+		PrintBy(top, "median")
 	}
 
 }
