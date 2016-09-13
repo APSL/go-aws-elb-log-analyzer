@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -14,7 +15,12 @@ import (
 // SVC is a global session to S3
 var SVC *s3.S3
 
+// Dirname where save the downloaded logs
+var Dirname string
+
 func main() {
+
+	flag.StringVar(&Dirname, "dir", "/tmp", "a string var")
 
 	var awsProfile string
 	flag.StringVar(&awsProfile, "profile", "", "a string var")
@@ -25,14 +31,17 @@ func main() {
 	var awsBucket string
 	flag.StringVar(&awsBucket, "bucket", "", "a string var")
 
-	var awsPrefix string
-	flag.StringVar(&awsPrefix, "prefix", "", "a string var")
-
 	var strStart string
 	flag.StringVar(&strStart, "start", "", "a string var")
 
 	var strEnd string
-	flag.StringVar(&strEnd, "end", "", "a string var")
+	flag.StringVar(&strEnd, "end", "1h", "a string var")
+
+	var strPrefix string
+	flag.StringVar(&strPrefix, "prefix", "", "a string var")
+
+	var strSave string
+	flag.StringVar(&strSave, "save", "complete.log", "a string var")
 
 	var top int
 	flag.IntVar(&top, "top", 10, "a int var")
@@ -47,47 +56,47 @@ func main() {
 		Profile: awsProfile,
 	})
 
+	InitRecords()
+
 	// Select region
 	SVC = s3.New(sess, &aws.Config{Region: aws.String(awsRegion)})
 
 	start, _ := time.Parse("2006-01-02 15:04:05 -0700", strStart)
-	end, _ := time.Parse("2006-01-02 15:04:05 -0700", strEnd)
+	margin, _ := time.ParseDuration(strEnd)
+	end := start.Add(margin)
 
 	if analyze {
 		AnalyzerDispatch(start, end)
 	}
 
 	log.Printf("Time Range: %s - %s", start.String(), end.String())
-	awsPrefix = fmt.Sprintf("%s/%d/%02d/%02d", awsPrefix, start.Year(), start.Month(), start.Day())
 
-	log.Printf("Bucket: %s/%s", awsBucket, awsPrefix)
+	// awsPrefix = fmt.Sprintf("%s/%d/%02d/%02d", awsPrefix, start.Year(), start.Month(), start.Day())
+
+	// log.Printf("Bucket: %s/%s", awsBucket, awsPrefix)
 
 	// Start S3 file reading
-	s3page(SVC, awsBucket, awsPrefix, start, end, analyze, nil)
+	s3page(SVC, awsBucket, 100, "", start, end, analyze, nil)
 
 	if analyze {
 		AnalyzerQueue <- []byte(nil)
 		AnalyzerFinished()
 
-		// Print results
-		log.Println("Top clients by hits")
-		PrintBy(top, "hits")
-
-		// Print results
-		log.Println("Top of slowest clients")
-		PrintBy(top, "median")
+		PrintSortLog(strSave)
 	}
 
 }
 
-func s3page(SVC *s3.S3, bucket string, prefix string, start time.Time, end time.Time, analyze bool, NextToken *string) {
+func s3page(SVC *s3.S3, bucket string, maxkeys int64, prefix string, start time.Time, end time.Time, analyze bool, NextToken *string) {
 	params := &s3.ListObjectsV2Input{
 		Bucket:            aws.String(bucket), // Required
-		MaxKeys:           aws.Int64(1000),
+		MaxKeys:           aws.Int64(maxkeys),
 		Prefix:            aws.String(prefix),
 		ContinuationToken: NextToken,
 	}
 	resp, err := SVC.ListObjectsV2(params)
+
+	region := *SVC.Config.Region
 
 	if err != nil {
 		// Print the error, cast err to awserr.Error to get the Code and
@@ -101,7 +110,21 @@ func s3page(SVC *s3.S3, bucket string, prefix string, start time.Time, end time.
 	// Pretty-print the response data.
 	for f := range resp.Contents {
 		file := NewFileLog(params.Bucket, resp.Contents[f].Key)
-		//fmt.Printf("    File %v\n", file.Date)
+
+		if prefix == "" {
+			searchkey := "/elasticloadbalancing/" + region + "/"
+			index := strings.Index(file.Key, searchkey)
+			if index <= 0 {
+				// Continue with the next "page". It's like click in "more" or scroll down
+				s3page(SVC, bucket, 100, prefix, start, end, analyze, resp.NextContinuationToken)
+				return
+			}
+			index = index + len(searchkey)
+			prefix = fmt.Sprintf("%s%d/%02d/%02d", file.Key[0:index], start.Year(), start.Month(), start.Day())
+
+			log.Printf("SET Prefix: %s\n", prefix)
+		}
+
 		if InTimeSpan(start, end, file.Date) {
 			log.Printf("Reading %s\n", file.Key)
 			file.Download(start, end)
@@ -117,7 +140,7 @@ func s3page(SVC *s3.S3, bucket string, prefix string, start time.Time, end time.
 	}
 
 	// Continue with the next "page". It's like click in "more" or scroll down
-	s3page(SVC, bucket, prefix, start, end, analyze, resp.NextContinuationToken)
+	s3page(SVC, bucket, 100, prefix, start, end, analyze, resp.NextContinuationToken)
 }
 
 // InTimeSpan if the record it's in the time range

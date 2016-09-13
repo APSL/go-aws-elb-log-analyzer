@@ -77,7 +77,6 @@ func analyzerFile(filelog string) {
 	defer wg.Done()
 
 	log.Printf("Analyzing %s", filelog)
-
 	count := 0
 
 	file, err := os.Open(filelog)
@@ -86,23 +85,29 @@ func analyzerFile(filelog string) {
 	}
 	defer func() {
 		file.Close()
-		log.Printf("%d lines where processed", count)
+		log.Printf("%s - %d lines where processed", filelog, count)
 	}()
 
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
+	filepointer := NewFilePointer(filelog)
+	reader := bufio.NewReader(file)
+	pos := int64(0)
 
-		line := NewLineLog(scanner.Text())
-
-		if InTimeSpan(start, end, line.Time) {
-			RecordIP(line.IPClient, 1, line.Elapsed)
-
+	for {
+		l, err := reader.ReadString(byte('\n'))
+		if err != nil {
+			break
 		}
 
-		count++
-	}
+		line := NewLineLog(l, *filepointer, pos)
+		pos += int64(len(l))
 
-	if err := scanner.Err(); err != nil {
-		log.Fatal(err)
+		if InTimeSpan(start, end, line.Time) {
+			RecordAdd(*line)
+
+			if err != nil {
+				log.Fatalf("Error: %v", err)
+			}
+		}
+		count++
 	}
 }

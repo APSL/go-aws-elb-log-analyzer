@@ -33,7 +33,7 @@ func NewFileLog(bucket *string, key *string) *FileLog {
 	file := &FileLog{
 		Bucket:   b,
 		Key:      name,
-		Filename: fmt.Sprintf("/tmp/%s", path.Base(name)),
+		Filename: fmt.Sprintf("%s", path.Base(name)),
 	}
 
 	file.parseDate()
@@ -41,8 +41,6 @@ func NewFileLog(bucket *string, key *string) *FileLog {
 }
 
 func (f *FileLog) parseDate() {
-
-	//fmt.Println(resp.Contents[f])
 	// AWSLogs/88888888888/elasticloadbalancing/eu-west-1/2016/08/28/888888888888_elasticloadbalancing_eu-west-1_MY-ELB-NAME_20160828T1615Z_192.168.2.1_58yr1tfa.log
 	re := regexp.MustCompile(".*_(?P<year>[0-9]{4})(?P<month>[0-9]{2})(?P<day>[0-9]{2})T(?P<h>[0-9]{2})(?P<m>[0-9]{2})Z_.*.log")
 	reversed := fmt.Sprintf(
@@ -56,7 +54,7 @@ func (f *FileLog) parseDate() {
 // Download and proccess
 func (f *FileLog) Download(start time.Time, end time.Time) {
 
-	tmpfilename := fmt.Sprintf("/tmp/.downloading__%s", path.Base(f.Filename))
+	tmpfilename := fmt.Sprintf(".downloading__%s", path.Base(f.Filename))
 
 	// Return in case the file exists
 	if _, err := os.Stat(f.Filename); err == nil {
@@ -88,34 +86,10 @@ func (f *FileLog) Download(start time.Time, end time.Time) {
 			Bucket: aws.String(f.Bucket), // Required
 			Key:    aws.String(f.Key),    // Required
 		})
+
 	if err != nil {
 		fmt.Println("Failed to download file", err)
 		return
 	}
-
-	/***
-	params := &s3.GetObjectInput{
-		Bucket: aws.String(f.Bucket), // Required
-		Key:    aws.String(f.Key),    // Required
-	}
-	resp, _ := SVC.GetObject(params)
-
-	fmt.Printf("Body %v", resp.Body)
-
-	count := 0
-	scanner := bufio.NewScanner(resp.Body)
-	for scanner.Scan() {
-
-
-		line := NewLineLog(scanner.Text())
-
-		if InTimeSpan(start, end, line.Time) {
-			RecordIP(line.IPClient, 1, line.Elapsed)
-			count++
-		}
-	}
-
-	log.Printf("%d lines where processed", count)
-	**/
 
 }
