@@ -1,45 +1,47 @@
 package main
 
 import (
-	"fmt"
+	"bufio"
+	"log"
 	"os"
 	"sort"
 )
 
-// RawRecords is full list of records
-var RawRecords []LineLog
-
 // InitRecords start the records
 func InitRecords() {
-	RawRecords = make([]LineLog, 0)
+	rawRecords = make([]*LineLog, 0)
 }
 
 // RecordAdd include record in big slice
-func RecordAdd(line LineLog) {
-	RawRecords = append(RawRecords, line)
+func RecordAdd(line *LineLog) {
+	rawRecords = append(rawRecords, line)
 }
 
 // LogRecords stuct to sort all records
-type LogRecords []LineLog
+type LogRecords []*LineLog
+
+// RawRecords is full list of records
+var rawRecords LogRecords
 
 func (a LogRecords) Len() int           { return len(a) }
 func (a LogRecords) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a LogRecords) Less(i, j int) bool { return a[j].Time.After(a[i].Time) }
 
-// PrintSortLog order by date
-func PrintSortLog(save string) {
-
-	file, _ := os.OpenFile(save, os.O_CREATE|os.O_TRUNC|os.O_WRONLY|os.O_APPEND, 0660)
-
-	sort.Sort(LogRecords(RawRecords))
-
-	for l := range RawRecords {
-		// fmt.Printf("%s - %s\n", RawRecords[l].Time, RawRecords[l].Filelog)
-		buf := RawRecords[l].Filelog.GetLine(RawRecords[l].Seek, RawRecords[l].Len)
-		fmt.Printf("%s", string(buf))
-		file.Write(buf)
+// saveSortedLog order by date
+func saveSortedLog(save string) {
+	file, e := os.OpenFile(save, os.O_CREATE|os.O_TRUNC|os.O_WRONLY|os.O_APPEND, 0660)
+	if e != nil {
+		log.Panicln("Coudn't open file for writeing", save)
 	}
+	defer file.Close()
 
-	file.Close()
+	ob := bufio.NewWriter(file)
+	defer ob.Flush()
+
+	sort.Sort(rawRecords)
+
+	for _, r := range rawRecords {
+		ob.Write(r.Filelog.GetLine(r.Seek, r.Len))
+	}
 
 }

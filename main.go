@@ -46,8 +46,10 @@ func main() {
 	var top int
 	flag.IntVar(&top, "top", 10, "a int var")
 
-	var analyze bool
-	flag.BoolVar(&analyze, "analyze", false, "a bool var")
+	var joinFiles bool
+	flag.BoolVar(&joinFiles, "join", true, "a bool var")
+
+	analyze := true
 
 	flag.Parse()
 
@@ -65,24 +67,20 @@ func main() {
 	margin, _ := time.ParseDuration(strEnd)
 	end := start.Add(margin)
 
-	if analyze {
+	if joinFiles != false {
 		AnalyzerDispatch(start, end)
 	}
 
 	log.Printf("Time Range: %s - %s", start.String(), end.String())
 
-	// awsPrefix = fmt.Sprintf("%s/%d/%02d/%02d", awsPrefix, start.Year(), start.Month(), start.Day())
-
-	// log.Printf("Bucket: %s/%s", awsBucket, awsPrefix)
-
 	// Start S3 file reading
 	s3page(SVC, awsBucket, 100, "", start, end, analyze, nil)
 
-	if analyze {
-		AnalyzerQueue <- []byte(nil)
+	if joinFiles != false {
+		close(AnalyzerQueue)
 		AnalyzerFinished()
 
-		PrintSortLog(strSave)
+		saveSortedLog(strSave)
 	}
 
 }

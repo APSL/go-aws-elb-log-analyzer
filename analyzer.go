@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"fmt"
 	"log"
 	"os"
 	"sync"
@@ -60,16 +59,14 @@ func analyzerReader() {
 
 	for {
 		select {
-		case filelog := <-AnalyzerQueue:
-			if filelog == nil {
+		case filelog, more := <-AnalyzerQueue:
+			if !more {
 				return
 			}
 			wg.Add(1)
 			go analyzerFile(string(filelog))
 		}
 	}
-
-	fmt.Printf("Waiting %v", wg)
 
 }
 
@@ -95,14 +92,14 @@ func analyzerFile(filelog string) {
 	for {
 		l, err := reader.ReadString(byte('\n'))
 		if err != nil {
-			break
+			return
 		}
 
-		line := NewLineLog(l, *filepointer, pos)
+		line := NewLineLog(l, filepointer, pos)
 		pos += int64(len(l))
 
 		if InTimeSpan(start, end, line.Time) {
-			RecordAdd(*line)
+			RecordAdd(line)
 
 			if err != nil {
 				log.Fatalf("Error: %v", err)
