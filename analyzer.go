@@ -101,6 +101,10 @@ func analyzerFile(filelog string) {
 		if InTimeSpan(start, end, line.Time) {
 			RecordAdd(line)
 
+			if analyze {
+				RecordIP(line.IPClient, 1, line.Elapsed)
+			}
+
 			if err != nil {
 				log.Fatalf("Error: %v", err)
 			}

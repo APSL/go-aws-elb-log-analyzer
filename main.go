@@ -15,41 +15,36 @@ import (
 // SVC is a global session to S3
 var SVC *s3.S3
 
-// Dirname where save the downloaded logs
-var Dirname string
+// Analyze flag
+var analyze bool
+var joinFiles bool
+var filename string
 
 func main() {
 
-	flag.StringVar(&Dirname, "dir", "/tmp", "a string var")
-
 	var awsProfile string
-	flag.StringVar(&awsProfile, "profile", "", "a string var")
+	flag.StringVar(&awsProfile, "profile", "", "Profile credentials used by aws cli")
 
 	var awsRegion string
-	flag.StringVar(&awsRegion, "region", "eu-west-1", "a string var")
+	flag.StringVar(&awsRegion, "region", "eu-west-1", "Name of the region in AWS")
 
 	var awsBucket string
-	flag.StringVar(&awsBucket, "bucket", "", "a string var")
+	flag.StringVar(&awsBucket, "bucket", "", "Name of the S3 bucket")
 
 	var strStart string
-	flag.StringVar(&strStart, "start", "", "a string var")
+	flag.StringVar(&strStart, "start", "", "Date and time to start the download. Example: 2016-09-16 05:00:00 +0000")
 
 	var strEnd string
-	flag.StringVar(&strEnd, "end", "1h", "a string var")
+	flag.StringVar(&strEnd, "end", "1h", "Time after start, example of 30 minutes: 30m")
 
 	var strPrefix string
-	flag.StringVar(&strPrefix, "prefix", "", "a string var")
+	flag.StringVar(&strPrefix, "prefix", "", "Prefix or folder used in S3 bucket")
 
-	var strSave string
-	flag.StringVar(&strSave, "save", "complete.log", "a string var")
+	flag.StringVar(&filename, "filename", "complete.log", "Name of the final log file")
 
-	var top int
-	flag.IntVar(&top, "top", 10, "a int var")
+	flag.BoolVar(&joinFiles, "join", true, "Contact and sort all logs in one file")
 
-	var joinFiles bool
-	flag.BoolVar(&joinFiles, "join", true, "a bool var")
-
-	analyze := true
+	flag.BoolVar(&analyze, "analyze", false, "Analyze the logs to find top requests and top slow requests")
 
 	flag.Parse()
 
@@ -74,18 +69,27 @@ func main() {
 	log.Printf("Time Range: %s - %s", start.String(), end.String())
 
 	// Start S3 file reading
-	s3page(SVC, awsBucket, 100, "", start, end, analyze, nil)
+	s3page(SVC, awsBucket, 100, strPrefix, start, end, nil)
 
 	if joinFiles != false {
 		close(AnalyzerQueue)
 		AnalyzerFinished()
 
-		saveSortedLog(strSave)
+		saveSortedLog(filename)
+	}
+
+	if analyze {
+		fmt.Println("")
+		fmt.Println("***** TOP by hists")
+		PrintBy(20, "hits")
+		fmt.Println("")
+		fmt.Println("***** TOP by median latency")
+		PrintBy(20, "median")
 	}
 
 }
 
-func s3page(SVC *s3.S3, bucket string, maxkeys int64, prefix string, start time.Time, end time.Time, analyze bool, NextToken *string) {
+func s3page(SVC *s3.S3, bucket string, maxkeys int64, prefix string, start time.Time, end time.Time, NextToken *string) {
 	params := &s3.ListObjectsV2Input{
 		Bucket:            aws.String(bucket), // Required
 		MaxKeys:           aws.Int64(maxkeys),
@@ -114,7 +118,7 @@ func s3page(SVC *s3.S3, bucket string, maxkeys int64, prefix string, start time.
 			index := strings.Index(file.Key, searchkey)
 			if index <= 0 {
 				// Continue with the next "page". It's like click in "more" or scroll down
-				s3page(SVC, bucket, 100, prefix, start, end, analyze, resp.NextContinuationToken)
+				s3page(SVC, bucket, 100, prefix, start, end, resp.NextContinuationToken)
 				return
 			}
 			index = index + len(searchkey)
@@ -138,7 +142,7 @@ func s3page(SVC *s3.S3, bucket string, maxkeys int64, prefix string, start time.
 	}
 
 	// Continue with the next "page". It's like click in "more" or scroll down
-	s3page(SVC, bucket, 100, prefix, start, end, analyze, resp.NextContinuationToken)
+	s3page(SVC, bucket, 100, prefix, start, end, resp.NextContinuationToken)
 }
 
 // InTimeSpan if the record it's in the time range

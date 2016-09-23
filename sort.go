@@ -7,6 +7,12 @@ import (
 	"sort"
 )
 
+// LogRecords stuct to sort all records
+type LogRecords []*LineLog
+
+// RawRecords is full list of records
+var rawRecords LogRecords
+
 // InitRecords start the records
 func InitRecords() {
 	rawRecords = make([]*LineLog, 0)
@@ -16,12 +22,6 @@ func InitRecords() {
 func RecordAdd(line *LineLog) {
 	rawRecords = append(rawRecords, line)
 }
-
-// LogRecords stuct to sort all records
-type LogRecords []*LineLog
-
-// RawRecords is full list of records
-var rawRecords LogRecords
 
 func (a LogRecords) Len() int           { return len(a) }
 func (a LogRecords) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
@@ -33,6 +33,7 @@ func saveSortedLog(save string) {
 	if e != nil {
 		log.Panicln("Coudn't open file for writeing", save)
 	}
+	defer log.Printf("Sorted log file saved in %s", file.Name())
 	defer file.Close()
 
 	ob := bufio.NewWriter(file)

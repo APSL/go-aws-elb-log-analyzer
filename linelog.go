@@ -3,6 +3,7 @@ package main
 import (
 	"net"
 	"regexp"
+	"strconv"
 	"time"
 )
 
@@ -26,7 +27,7 @@ type LineLog struct {
 	Len      int
 }
 
-// NewLineLog export
+// NewLineLog create an structure of anlyzce record
 func NewLineLog(raw string, filelog *FilePointer, seek int64) *LineLog {
 
 	line := &LineLog{
@@ -40,10 +41,9 @@ func NewLineLog(raw string, filelog *FilePointer, seek int64) *LineLog {
 	return line
 }
 
+// parse the raw record with regular expresion and store in the struct
 func (l *LineLog) parse(raw string) {
 
-	//re := regexp.MustCompile(`(?P<date>[^Z]+Z) (?P<elb>[^\s]+) (?P<ipclient>[^:]+?):[0-9]+ (?P<ipnode>[^:]+?):[0-9]+ (?P<reqtime>[0-9\.]+) (?P<backtime>[0-9\.]+) (?P<restime>[0-9\.]+) (?P<elbcode>[0-9]{3}) (?P<backcode>[0-9]{3}) (?P<lenght1>[0-9]+) (?P<lenght2>[0-9]+) "(?P<Method>[A-Z]+) (?P<URL>[^"]+) HTTP/[0-9\.]+".*`)
-	//n1 := regex.SubexpNames()
 	r := re.FindAllStringSubmatch(raw, -1)
 
 	if r == nil {
@@ -55,29 +55,29 @@ func (l *LineLog) parse(raw string) {
 		case "date":
 			l.Time, _ = time.Parse(time.RFC3339Nano, n)
 			break
-			/*
-				case "ipclient":
-					l.IPClient = net.ParseIP(n)
-					break
-				case "Method":
-					l.Method = n
-					break
-				case "URL":
-					l.URL = n
-					break
-				case "reqtime":
-					_time, _ := strconv.ParseFloat(n, 64)
-					l.Elapsed = l.Elapsed + _time
-					break
-				case "backtime":
-					_time, _ := strconv.ParseFloat(n, 64)
-					l.Elapsed = l.Elapsed + _time
-					break
-				case "restime":
-					_time, _ := strconv.ParseFloat(n, 64)
-					l.Elapsed = l.Elapsed + _time
-					break
-			*/
+		case "ipclient":
+			if analyze {
+				l.IPClient = net.ParseIP(n)
+			}
+			break
+		case "reqtime":
+			if analyze {
+				_time, _ := strconv.ParseFloat(n, 64)
+				l.Elapsed = l.Elapsed + _time
+			}
+			break
+		case "backtime":
+			if analyze {
+				_time, _ := strconv.ParseFloat(n, 64)
+				l.Elapsed = l.Elapsed + _time
+			}
+			break
+		case "restime":
+			if analyze {
+				_time, _ := strconv.ParseFloat(n, 64)
+				l.Elapsed = l.Elapsed + _time
+			}
+			break
 		}
 
 	}

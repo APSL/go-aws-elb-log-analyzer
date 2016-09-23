@@ -58,6 +58,8 @@ func (a BuildIPSorter) Less(i, j int) bool {
 	switch a[i].ByColumn {
 	case "median":
 		return a[i].Median > a[j].Median
+	case "percentile":
+		return a[i].Percentile > a[j].Percentile
 	default:
 		return a[i].Hits > a[j].Hits
 	}
@@ -105,7 +107,7 @@ func printTable(ips []IPSorted, limit int) {
 	w.Flush()
 }
 
-// PrintBy order by hits
+// PrintBy order by byColumn (median, percentile..)
 func PrintBy(limit int, byColumn string) {
 
 	ips := createTable(byColumn)
