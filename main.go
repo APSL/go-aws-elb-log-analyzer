@@ -62,7 +62,7 @@ func main() {
 	margin, _ := time.ParseDuration(strEnd)
 	end := start.Add(margin)
 
-	if joinFiles != false {
+	if joinFiles != false || analyze != false {
 		AnalyzerDispatch(start, end)
 	}
 
@@ -71,7 +71,7 @@ func main() {
 	// Start S3 file reading
 	s3page(SVC, awsBucket, 100, strPrefix, start, end, nil)
 
-	if joinFiles != false {
+	if joinFiles != false || analyze != false {
 		close(AnalyzerQueue)
 		AnalyzerFinished()
 
@@ -130,7 +130,7 @@ func s3page(SVC *s3.S3, bucket string, maxkeys int64, prefix string, start time.
 		if InTimeSpan(start, end, file.Date) {
 			log.Printf("Reading %s\n", file.Key)
 			file.Download(start, end)
-			if analyze {
+			if joinFiles != false || analyze != false {
 				AnalyzerQueue <- []byte(file.Filename)
 			}
 		}
