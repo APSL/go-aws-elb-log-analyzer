@@ -50,7 +50,7 @@ goelbanalyzer \
   --bucket="my-elb-bucket-logs" \
   --start="2016-08-17 01:00:00 +0000" \
   --end="2h"
-  --analyse
+  --analyze
 ```
 
 ```
