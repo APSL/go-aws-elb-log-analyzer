@@ -21,7 +21,7 @@ var TopMutex = &sync.Mutex{}
 var TopIP map[string]*IPRecord
 
 // AnalyzerQueue Queue of files to analyce
-var AnalyzerQueue chan []byte
+var AnalyzerQueue chan *FileLog
 
 // AnalyzerDone Signal on complete files download
 var AnalyzerDone chan bool
@@ -39,7 +39,7 @@ func AnalyzerDispatch(vStart time.Time, vEnd time.Time) {
 
 	TopIP = make(map[string]*IPRecord)
 
-	AnalyzerQueue = make(chan []byte)
+	AnalyzerQueue = make(chan *FileLog, 10)
 
 	wg.Add(1)
 	go analyzerReader()
@@ -59,33 +59,33 @@ func analyzerReader() {
 
 	for {
 		select {
-		case filelog, more := <-AnalyzerQueue:
+		case f, more := <-AnalyzerQueue:
 			if !more {
 				return
 			}
 			wg.Add(1)
-			go analyzerFile(string(filelog))
+			go analyzerFile(f)
 		}
 	}
 
 }
 
-func analyzerFile(filelog string) {
+func analyzerFile(f *FileLog) {
 	defer wg.Done()
 
-	log.Printf("Analyzing %s", filelog)
+	log.Printf("Analyzing %s", f.Filename)
 	count := 0
 
-	file, err := os.Open(filelog)
+	file, err := os.Open(f.Filename)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer func() {
 		file.Close()
-		log.Printf("%s - %d lines where processed", filelog, count)
+		log.Printf("%s - %d lines where processed", f.Filename, count)
 	}()
 
-	filepointer := NewFilePointer(filelog)
+	f.Pointer = NewFilePointer(f.Filename)
 	reader := bufio.NewReader(file)
 	pos := int64(0)
 
@@ -95,7 +95,7 @@ func analyzerFile(filelog string) {
 			return
 		}
 
-		line := NewLineLog(l, filepointer, pos)
+		line := NewLineLog(l, f, pos)
 		pos += int64(len(l))
 
 		if InTimeSpan(start, end, line.Time) {

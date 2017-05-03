@@ -42,7 +42,7 @@ func saveSortedLog(save string) {
 	sort.Sort(rawRecords)
 
 	for _, r := range rawRecords {
-		ob.Write(r.Filelog.GetLine(r.Seek, r.Len))
+		ob.Write(r.Filelog.Pointer.GetLine(r.Seek, r.Len))
 	}
 
 }

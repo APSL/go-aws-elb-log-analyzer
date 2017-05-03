@@ -131,7 +131,7 @@ func s3page(SVC *s3.S3, bucket string, maxkeys int64, prefix string, start time.
 			log.Printf("Reading %s\n", file.Key)
 			file.Download(start, end)
 			if joinFiles != false || analyze != false {
-				AnalyzerQueue <- []byte(file.Filename)
+				AnalyzerQueue <- file
 			}
 		}
 	}
